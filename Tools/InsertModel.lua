@@ -1,5 +1,4 @@
-local Main = script:FindFirstAncestor("MCPStudioPlugin")
-local Types = require(Main.Types)
+local Types = loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Vertrual/test/refs/heads/main/Types.lua"))()
 
 local INSERT_MAX_SEARCH_DEPTH = 2048
 local INSERT_MAX_DISTANCE_AWAY = 20
