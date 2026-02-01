@@ -1,5 +1,4 @@
-local Main = script:FindFirstAncestor("MCPStudioPlugin")
-local Types = require(Main.Types)
+local Types = loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Vertrual/test/refs/heads/main/Types.lua"))()
 
 local HttpService = game:GetService("HttpService")
 
