@@ -71,7 +71,76 @@ function MockWebSocketClient.new(uri: string): MockWebSocketClient
 	return self
 end
 
+local function normalizeResponse(res)
+	if type(res) ~= "table" then
+		return nil
+	end
+
+	local body = res.Body or res.body or res.Response or res.Data or ""
+	local status = res.StatusCode or res.status or res.Status or res.statusCode
+	local success = res.Success
+
+	if success == nil then
+		if type(status) == "number" then
+			success = status >= 200 and status < 300
+		elseif body and #tostring(body) > 0 then
+			success = true
+		else
+			success = false
+		end
+	end
+
+	return { Success = success == true, Body = tostring(body or "") }
+end
+
+local function tryVariant(fnName, fn)
+	local ok, res = pcall(fn)
+	if not ok then
+		log(fnName .. " threw:", tostring(res))
+		return nil
+	end
+	local normalized = normalizeResponse(res)
+	if normalized then
+		log(fnName .. " succeeded; status/hasBody:", tostring(normalized.Success), #tostring(normalized.Body))
+	end
+	return normalized
+end
+
 local function doRequest(url: string, method: "GET" | "POST", body: any)
+	local encodedBody = if body then HttpService:JSONEncode(body) else nil
+
+	-- Try syn.request if present
+	if typeof(syn) == "table" and syn.request then
+		local res = tryVariant("syn.request", function()
+			return syn.request({ Url = url, Method = method, Headers = { ["Content-Type"] = "application/json" }, Body = encodedBody })
+		end)
+		if res then return res end
+	end
+
+	-- Try http.request (some exploits expose this)
+	if type(http) == "table" and http.request then
+		local res = tryVariant("http.request", function()
+			return http.request({ Url = url, Method = method, Headers = { ["Content-Type"] = "application/json" }, Body = encodedBody })
+		end)
+		if res then return res end
+	end
+
+	-- Try legacy global functions
+	if type(http_request) == "function" then
+		local res = tryVariant("http_request", function()
+			return http_request({ Url = url, Method = method, Headers = { ["Content-Type"] = "application/json" }, Body = encodedBody })
+		end)
+		if res then return res end
+	end
+
+	if type(request) == "function" then
+		local res = tryVariant("request", function()
+			return request({ Url = url, Method = method, Headers = { ["Content-Type"] = "application/json" }, Body = encodedBody })
+		end)
+		if res then return res end
+	end
+
+	-- Finally, fall back to HttpService:RequestAsync if available
 	local ok, response = pcall(function()
 		return HttpService:RequestAsync({
 			Url = url,
@@ -79,7 +148,7 @@ local function doRequest(url: string, method: "GET" | "POST", body: any)
 			Headers = {
 				["Content-Type"] = "application/json",
 			},
-			Body = if body then HttpService:JSONEncode(body) else nil,
+			Body = encodedBody,
 			Compress = Enum.HttpCompression.None,
 		})
 	end)
@@ -94,10 +163,8 @@ local function doRequest(url: string, method: "GET" | "POST", body: any)
 		return nil
 	end
 
-	-- Some environments may not include a Success boolean; treat a response with a Body as valid.
-	if response.Success == true or (response.Body and #tostring(response.Body) > 0) then
-		return response
-	end
+	local normalized = normalizeResponse(response)
+	if normalized then return normalized end
 
 	log("Request failed or not successful:", tostring(response.Success))
 	return nil
