@@ -1,5 +1,12 @@
 local HttpService = game:GetService("HttpService")
 
+local DEBUG = true
+local function log(...)
+	if DEBUG then
+		warn("[MockWebSocketService]", ...)
+	end
+end
+
 local MockWebSocketClient = {}
 MockWebSocketClient.__index = MockWebSocketClient
 
@@ -77,7 +84,23 @@ local function doRequest(url: string, method: "GET" | "POST", body: any)
 		})
 	end)
 
-	return if ok and response.Success then response else nil
+	if not ok then
+		log("RequestAsync threw an error:", tostring(response))
+		return nil
+	end
+
+	if type(response) ~= "table" then
+		log("RequestAsync returned unexpected type:", typeof(response), tostring(response))
+		return nil
+	end
+
+	-- Some environments may not include a Success boolean; treat a response with a Body as valid.
+	if response.Success == true or (response.Body and #tostring(response.Body) > 0) then
+		return response
+	end
+
+	log("Request failed or not successful:", tostring(response.Success))
+	return nil
 end
 
 function MockWebSocketClient._OpenImpl(self: MockWebSocketClientPrivate)
